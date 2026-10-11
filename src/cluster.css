@@ -1,0 +1,57 @@
+/* Road Mode cluster, native 610 x 225.4 px (Figma node 1:52565). Values come from the Figma frame. */
+.cluster {
+  position: relative;
+  width: 610px;
+  height: 225.41px;
+  background: #000;
+  /* Figma measures children from the outer edge; an inset shadow keeps the 0.513px border out of layout */
+  box-shadow: inset 0 0 0 0.513px #666;
+  border-radius: 17.971px;
+  overflow: hidden;
+  color: #fff;
+  font-family: "Inter", sans-serif;
+}
+.cluster .a {
+  position: absolute;
+  display: block;
+  max-width: none;
+}
+.cluster .t {
+  position: absolute;
+  margin: 0;
+  white-space: nowrap;
+  line-height: normal;
+  font-weight: 500;
+  font-size: 15.404px;
+  letter-spacing: -0.7702px;
+}
+.cluster .t-air { left: 16.49px; top: 7.49px; }
+.cluster .t-clock { left: 594.49px; top: 7.69px; transform: translateX(-100%); text-align: right; }
+
+.cluster .t-msg1 { left: 84.49px; top: 95px; font-size: 18.371px; letter-spacing: -0.9185px; }
+.cluster .t-msg2 { left: 82.49px; top: 115px; font-size: 18.371px; letter-spacing: -0.9185px; }
+
+.cluster .t-speed {
+  left: calc(50% - 0.23px);
+  top: 54.49px;
+  width: 115.53px;
+  height: 72.4px;
+  /* CSS adds the (negative) letter-spacing after the last glyph too, which pushes centred text right; Figma does not */
+  transform: translateX(calc(-50% - 2.87px));
+  text-align: center;
+  font-weight: 700;
+  font-size: 71.793px;
+  letter-spacing: -5.7434px;
+}
+.cluster .t-unit { left: 293.01px; top: 126.9px; font-size: 7.189px; letter-spacing: -0.3594px; }
+.cluster .t-rpm { left: 360.49px; top: 152.49px; font-size: 5.591px; letter-spacing: -0.2796px; }
+.cluster .t-mode {
+  left: 50%;
+  top: 162.83px;
+  transform: translateX(calc(-50% - 0.44px));
+  font-weight: 700;
+  font-size: 17.406px;
+  letter-spacing: -0.8703px;
+}
+.cluster .t-gear { left: 464.8px; top: 55.49px; font-weight: 300; font-size: 71.793px; letter-spacing: -5.7434px; }
+.cluster .t-gearlabel { left: 477.86px; top: 128.91px; font-size: 7.189px; letter-spacing: -0.3594px; }
