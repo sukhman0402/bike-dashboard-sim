@@ -53,5 +53,13 @@
   font-size: 17.406px;
   letter-spacing: -0.8703px;
 }
-.cluster .t-gear { left: 464.8px; top: 55.49px; font-weight: 300; font-size: 71.793px; letter-spacing: -5.7434px; }
+/* Centred on the middle of Figma's "3" (x 486.55) so "N" and other glyphs stay over the GEAR label; -2.87px as for the speed */
+.cluster .t-gear {
+  left: 486.55px;
+  top: 55.49px;
+  transform: translateX(calc(-50% - 2.87px));
+  font-weight: 300;
+  font-size: 71.793px;
+  letter-spacing: -5.7434px;
+}
 .cluster .t-gearlabel { left: 477.86px; top: 128.91px; font-size: 7.189px; letter-spacing: -0.3594px; }

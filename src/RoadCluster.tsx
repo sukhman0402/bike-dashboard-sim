@@ -1,10 +1,12 @@
-import type { ClusterState } from "./clusterState";
+import { RPM_MAX, type ClusterState } from "./clusterState";
 import "./cluster.css";
 
 import abs from "./assets/cluster/abs.svg";
 import warning from "./assets/cluster/warning.svg";
 import wrench from "./assets/cluster/wrench.svg";
-import speedArc from "./assets/cluster/speed-arc.svg";
+import arcTrack from "./assets/cluster/speed-arc-track.svg";
+import arcFill from "./assets/cluster/speed-arc-fill.svg";
+import arcRing from "./assets/cluster/speed-arc-ring.svg";
 import fuel from "./assets/cluster/fuel.svg";
 import oilTemp from "./assets/cluster/oil-temp.svg";
 import location from "./assets/cluster/location.svg";
@@ -14,11 +16,26 @@ import temperature from "./assets/cluster/temperature.svg";
 import drl from "./assets/cluster/drl-a.png";
 import arrows from "./assets/cluster/arrows.png";
 
+// RPM arc geometry, measured from the Figma path data: circle centre (96.0, 95.15) in the 190 x 144
+// SVG, the band starts at 236.5 deg (clockwise from 12 o'clock) and sweeps 247.0 deg to the end.
+const ARC_START_DEG = 236.5;
+const ARC_SWEEP_DEG = 247;
+const ARC_AT = "50.53% 66.08%";
+
+// The red fill is the Figma band revealed by a wedge from the arc centre, so its end stays radial.
+function arcMask(rpm: number) {
+  const end = ARC_SWEEP_DEG * Math.min(1, Math.max(0, rpm / RPM_MAX));
+  const g = `conic-gradient(from ${ARC_START_DEG}deg at ${ARC_AT}, #000 ${end}deg, transparent ${end + 0.3}deg)`;
+  return { maskImage: g, WebkitMaskImage: g };
+}
+
+const ARC_BOX = { left: 305.66, top: 7.49, width: 189.78, height: 143.7, transform: "translateX(-50%)" } as const;
+
 // Source: Figma file 7h8baVVBXfCwBsWUUHjD3N, node 1:52565 "Road Mode- 01" (slide 31, Interface 03).
 // Native size 610 x 225.4 px. Every element sits at the position and size taken from the frame.
 export function RoadCluster({ state }: { state: ClusterState }) {
   return (
-    <div className="cluster" role="img" aria-label={`Road mode, ${state.speedKmh} kilometres per hour, gear ${state.gear}`}>
+    <div className="cluster" role="img" aria-label={`Simulated road mode, ${state.speedKmh} kilometres per hour, gear ${state.gear}`}>
       {/* top row */}
       <p className="t t-air">Air {state.ambientTempC}C</p>
       <img className="a" src={location} alt="" style={{ left: 495.55, top: 11.55, width: 10.5, height: 12.9 }} />
@@ -31,7 +48,9 @@ export function RoadCluster({ state }: { state: ClusterState }) {
       <p className="t t-msg2">Inactive</p>
 
       {/* centre: speed arc, speed, unit, turn arrows, mode */}
-      <img className="a" src={speedArc} alt="" style={{ left: 305.66, top: 7.49, width: 189.78, height: 143.7, transform: "translateX(-50%)" }} />
+      <img className="a" src={arcTrack} alt="" style={ARC_BOX} />
+      <img className="a" src={arcFill} alt="" style={{ ...ARC_BOX, ...arcMask(state.rpm) }} />
+      <img className="a" src={arcRing} alt="" style={ARC_BOX} />
       <p className="t t-speed">{state.speedKmh}</p>
       <p className="t t-unit">KM/HR</p>
       <img className="a" src={arrows} alt="" style={{ left: 276.58, top: 141.8, width: 56.99, height: 17.43 }} />
