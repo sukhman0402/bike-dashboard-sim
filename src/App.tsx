@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { RoadCluster } from "./RoadCluster";
 import { useCluster } from "./useCluster";
+import { PREVIEWS } from "./previews";
 
 const NATIVE_W = 610;
 const NATIVE_H = 225.41;
@@ -28,9 +29,12 @@ const KEYS: { keys: string[]; action: string }[] = [
 ];
 
 export default function App() {
-  // ?state=figma freezes the cluster on the exact Figma frame values (for comparing against the reference).
-  const frozen = new URLSearchParams(window.location.search).get("state") === "figma";
-  const state = useCluster(frozen);
+  // ?preview=<name> shows a static design state (see previews.ts); ?state=figma is the Figma frame itself.
+  const q = new URLSearchParams(window.location.search);
+  const preview = q.get("state") === "figma" ? "figma" : q.get("preview");
+  const frozen = preview !== null && preview in PREVIEWS;
+  const live = useCluster(frozen);
+  const state = frozen ? PREVIEWS[preview!] : live;
   const scale = useFitScale(2.4);
   return (
     <main className="stage">

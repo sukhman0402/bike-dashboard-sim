@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FIGMA_DEFAULT, type ClusterState } from "./clusterState";
+import { LIVE_DEFAULT, type ClusterState } from "./clusterState";
 import { START, shiftDown, shiftNeutral, shiftUp, step, type Vehicle } from "./vehicleModel";
 
 // Keyboard map. Keys are matched by physical position (event.code) so they work on any layout.
@@ -12,12 +12,12 @@ export const KEY_MAP = {
 } as const;
 
 const HANDLED = new Set<string>(Object.values(KEY_MAP).flat());
-const toState = (v: Vehicle): ClusterState => ({ ...FIGMA_DEFAULT, speedKmh: Math.round(v.speedKmh), rpm: v.rpm, gear: v.gear });
+const toState = (v: Vehicle): ClusterState => ({ ...LIVE_DEFAULT, speedKmh: Math.round(v.speedKmh), rpm: v.rpm, gear: v.gear });
 
-// Runs the vehicle model from the keyboard. With `frozen` it shows the Figma frame values and
-// does nothing else (used to compare the render against the Figma reference).
+// Runs the vehicle model from the keyboard. With `frozen` it does nothing: App then shows a static
+// design preview instead (used to compare against the Figma reference and to approve new states).
 export function useCluster(frozen: boolean): ClusterState {
-  const [state, setState] = useState<ClusterState>(() => (frozen ? FIGMA_DEFAULT : toState(START)));
+  const [state, setState] = useState<ClusterState>(() => toState(START));
 
   useEffect(() => {
     if (frozen) return;
@@ -67,5 +67,5 @@ export function useCluster(frozen: boolean): ClusterState {
     };
   }, [frozen]);
 
-  return frozen ? FIGMA_DEFAULT : state;
+  return state;
 }

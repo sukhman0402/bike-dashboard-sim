@@ -25,15 +25,15 @@
   font-size: 15.404px;
   letter-spacing: -0.7702px;
 }
-.cluster .t-air { left: 16.49px; top: 7.49px; }
-.cluster .t-clock { left: 594.49px; top: 7.69px; transform: translateX(-100%); text-align: right; }
+.cluster .t-air { left: 16.49px; top: 7.6px; } /* refined: shares the clock's top line */
+.cluster .t-clock { left: 594.49px; top: 7.6px; transform: translateX(-100%); text-align: right; }
 
 .cluster .t-msg1 { left: 84.49px; top: 95px; font-size: 18.371px; letter-spacing: -0.9185px; }
-.cluster .t-msg2 { left: 82.49px; top: 115px; font-size: 18.371px; letter-spacing: -0.9185px; }
+.cluster .t-msg2 { left: 84.49px; top: 115px; /* refined: same left edge as line 1 */ font-size: 18.371px; letter-spacing: -0.9185px; }
 
 .cluster .t-speed {
   left: calc(50% - 0.23px);
-  top: 54.49px;
+  top: 50.5px; /* refined: 4 px higher, more room above km/h */
   width: 115.53px;
   height: 72.4px;
   /* CSS adds the (negative) letter-spacing after the last glyph too, which pushes centred text right; Figma does not */
@@ -43,8 +43,7 @@
   font-size: 71.793px;
   letter-spacing: -5.7434px;
 }
-.cluster .t-unit { left: 293.01px; top: 126.9px; font-size: 7.189px; letter-spacing: -0.3594px; }
-.cluster .t-rpm { left: 360.49px; top: 152.49px; font-size: 5.591px; letter-spacing: -0.2796px; }
+.cluster .t-unit { left: 50%; top: 129.6px; transform: translateX(-50%); font-size: 9.5px; letter-spacing: 0.2px; color: #BEBEBE; } /* refined: km/h, larger, centred */
 .cluster .t-mode {
   left: 50%;
   top: 162.83px;
@@ -56,10 +55,77 @@
 /* Centred on the middle of Figma's "3" (x 486.55) so "N" and other glyphs stay over the GEAR label; -2.87px as for the speed */
 .cluster .t-gear {
   left: 486.55px;
-  top: 55.49px;
+  top: 51.5px; /* refined: 4 px higher, more room above GEAR */
   transform: translateX(calc(-50% - 2.87px));
   font-weight: 300;
   font-size: 71.793px;
   letter-spacing: -5.7434px;
 }
-.cluster .t-gearlabel { left: 477.86px; top: 128.91px; font-size: 7.189px; letter-spacing: -0.3594px; }
+.cluster .t-gearlabel { left: 486.55px; top: 131.6px; transform: translateX(-50%); font-size: 9.5px; letter-spacing: 0.6px; color: #BEBEBE; } /* refined: larger, centred on the gear */
+
+/* Tell-tales stay dark until their event (functional spec section 4). Fades are under 300 ms. */
+.cluster .lamp { transition: opacity 120ms linear; }
+.cluster .turn {
+  background: #34D14A;
+  -webkit-mask-image: url("./assets/cluster/arrows.png");
+  mask-image: url("./assets/cluster/arrows.png");
+  -webkit-mask-size: 56.99px 17.43px;
+  mask-size: 56.99px 17.43px;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  transition: opacity 120ms linear;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cluster .lamp, .cluster .turn { transition: none; }
+}
+
+/* Gear is green in neutral and white otherwise (slide 19); red while the limiter flashes */
+.cluster .gear-n { color: #3DDC4A; }
+.cluster .gear-limit { color: #FF2A1F; }
+
+/* Menu panels (parameter quick menu, riding mode list). Row styling follows the Race screen in the case study. */
+.cluster .panel { position: absolute; width: 152px; display: flex; flex-direction: column; gap: 1px; }
+.cluster .row {
+  display: flex;
+  align-items: center;
+  height: 18.4px;
+  padding: 0 9px;
+  box-sizing: border-box;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 13.5px;
+  font-weight: 500;
+  letter-spacing: -0.4px;
+}
+.cluster .row .lab { flex: 0 0 58px; }
+.cluster .row .lvl { flex: 0 0 34px; font-weight: 700; }
+.cluster .row .bar { margin-left: auto; width: 24px; height: 3px; border-radius: 2px; }
+.cluster .row .power { margin-left: auto; font-size: 9.5px; letter-spacing: 0; color: #a8a8a8; text-transform: uppercase; }
+.cluster .row.sel { border-color: var(--accent, #FFBF00); }
+.cluster .row.edit { background: #FFBF00; color: #000; }
+.cluster .row.edit .lvl::after { content: "\2195"; margin-left: 5px; font-size: 11px; font-weight: 500; }
+
+/* Refinements (README, departures). Warnings use amber on the existing text. */
+.cluster .warn { color: #FFBF00; }
+.cluster .hint { opacity: 0.6; }
+.cluster .fuel { position: absolute; left: 231px; top: 198.49px; width: 150px; height: 17px; }
+.cluster .fuel img { position: absolute; left: 0; top: 0; display: block; }
+.cluster .fuel .seg { position: absolute; top: 0; width: 8px; height: 16px; background: #3F3F3F; }
+.cluster .fuel .seg.on { background: linear-gradient(to right, #630102, #C90203); }
+.cluster .fuel .seg.low { background: #FFBF00; }
+.cluster .fuel .range { position: absolute; left: 104px; top: -1px; margin: 0; font-size: 15.404px; font-weight: 500; letter-spacing: -0.4px; white-space: nowrap; }
+.cluster .fuel .range small { font-size: 9.5px; color: #BEBEBE; margin-left: 2px; letter-spacing: 0; }
+.cluster .views { position: absolute; width: 150px; }
+.cluster .views p { margin: 0; white-space: nowrap; }
+.cluster .views .v-title { font-size: 9.5px; font-weight: 600; letter-spacing: 1.2px; text-transform: uppercase; color: #BEBEBE; margin-bottom: 5px; }
+.cluster .views .v-row { display: flex; justify-content: space-between; align-items: baseline; height: 20px; }
+.cluster .views .v-lab { font-size: 9.5px; color: #BEBEBE; }
+.cluster .views .v-val { font-size: 16px; font-weight: 600; letter-spacing: -0.4px; }
+.cluster .views .v-val small { font-size: 9.5px; font-weight: 500; color: #BEBEBE; margin-left: 2px; letter-spacing: 0; }
+.cluster .views .v-dots { display: flex; gap: 5px; margin-top: 8px; }
+.cluster .views .v-dots i { width: 5px; height: 5px; border-radius: 50%; background: #3A3A3A; }
+.cluster .views .v-dots i.on { background: #FFFFFF; }
+.cluster .rpm-n { font-family: "Inter", sans-serif; font-size: 8.6px; font-weight: 700; letter-spacing: -0.2px; }
+.cluster .t-sub { color: #BEBEBE; }
+.cluster .t-status { left: 107px; top: 93px; font-size: 13.5px; letter-spacing: -0.4px; color: #FFFFFF; white-space: nowrap; }
+.cluster .t-status.t-sub { top: 110px; color: #BEBEBE; }
