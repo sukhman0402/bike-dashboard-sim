@@ -1,14 +1,12 @@
-# Road Mode cluster simulator (set-up stage)
+# Road Mode cluster simulator
 
 Working simulator of Design 3 (Figma slide 31, node `1:52565` "Road Mode- 01") for the Bike Dashboard Design case study.
 
 ## What exists now
 - Vite + React + TypeScript project, builds to static files (deploys to Vercel as-is).
-- `RoadCluster` renders the Figma frame at its native 610 x 225.4 px, scaled to the window.
-- Keyboard-driven (Stage 1): `src/useCluster.ts` reads the keys, `src/vehicleModel.ts` is the scripted engine and gearbox model.
-- Values driven by state: speed, RPM arc, gear. Clock, air temperature and mode are still fixed Figma values.
-- Everything else (tell-tales, fuel, oil/temperature bars, turn and scroll arrows) is still the static Figma art.
-- The page is labelled as a simulation, with a key hint strip.
+- `RoadCluster` renders the refined Road Mode 01 frame at its native 610 x 225.4 px, scaled to the window.
+- Stage 2b (built, awaiting approval): the whole dash is live from the keyboard. `src/vehicleModel.ts` is the engine and gearbox, `src/bikeState.ts` is everything else (ignition, start rules, switches, dash menus, trip, fuel, temperatures, messages), `src/useCluster.ts` feeds it keys and time.
+- The page is labelled as a simulation, shows a one-line hint of what to do next, and lists the keys in four groups.
 - `?state=figma` freezes the cluster on the exact Figma frame values, for comparing against `reference/figma-road-mode-01.png`.
 
 ## Design previews (Stage 2a, awaiting approval)
@@ -16,14 +14,28 @@ Working simulator of Design 3 (Figma slide 31, node `1:52565` "Road Mode- 01") f
 - Live default is now: nothing lit, no message. The Figma frame (all lit, "Rear ABS Inactive") is the placement demo only.
 - Arc scale is 0 to 16,000 rpm (placeholder, see `docs/functional-spec.md` section 8).
 
-## Keys (placeholder map, status: built, not yet approved)
-- `W` or Up arrow: throttle (hold). `S` or Down arrow: brake (hold).
-- `E`: shift up. `Q`: shift down. `N`: neutral.
-- A gear is refused if it would over-rev the engine.
+## Keys (functional spec section 7, approved)
+- Ride: `K` ignition, `Enter` start, `W` throttle (hold), `S` brake (hold), `Space` clutch (hold), `E` / `Q` shift up / down, `N` neutral, `L` side stand, `X` kill switch.
+- Handlebar: `,` / `.` left / right indicator, `H` hazard, `B` high beam.
+- Dash: Up / Down cycle the views (one press away) and scroll menus, Right selects, Left goes back, `M` riding mode list.
+- Demo (until the riding world exists): `1` ice, `2` oil pressure, `3` ABS fault, `4` low fuel, `5` service due. Each key toggles its event.
+- Departures from the spec, decided while building: `Enter` is the start button while the engine is off and the dash select button once it runs (the spec gave Enter both jobs). The arrow keys no longer work the throttle and brake (Stage 1 did this; the spec gives them to the dash).
 
-## Vehicle model (all numbers are placeholders)
-- Gear tops, acceleration, drag, braking and the 12,000 RPM arc scale are invented to feel plausible. They are not data from any real motorcycle.
-- The Figma arc is labelled "RPM x 1000", so the arc follows RPM, not speed.
+## Engine and gearbox model (Stage 2b)
+- Real [Official]: primary 1.80, gears 36/15, 34/17, 33/19, 32/21, 30/22, 27/22, final drive 16/41, torque 120.9 Nm at 11,250 rpm, 158.9 kW at 13,500 rpm, 80% of peak torque at 6,000 rpm, the dash reads 5% high.
+- Fitted to measured magazine data: drive efficiency 0.82, drag area 0.37 m2, wheelie-control limit. Check with `node scripts/check-model.ts` (RACE A: 0 to 100 km/h 3.40 s, 0 to 200 km/h 6.98 s, top 298.7 km/h true, 314 shown; verified by running it).
+- Placeholders: idle 1,300 rpm, Medium and Low power at 88% and 70%, throttle twist time per power mode, launch clutch slip at 7,500 rpm, brake 0.95 g, engine braking, fuel flow (0.9 L/h plus 0.5 L per kWh), coolant warm-up speed, DSC, EBC and ABS level ranges.
+- Unverified (spec section 8): shift cue 13,500 rpm, limiter 15,000 rpm, red zone 15,000 to 16,000.
+- Rules: a gear that would pass the limiter is refused; neutral is found from 1st or 2nd only (it sits between them); the engine starts in neutral, or in gear with the clutch held and the side stand up; the engine stops if the side stand is down in gear, on the kill switch, or with an empty tank; the riding mode changes only with the throttle closed.
+
+## Dash behaviour (Stage 2b)
+- Key-on: dark screen, Ducati logo 1.5 s, all tell-tales 2 s (slide 19), then the run screen. Oil lamp lit until the engine runs.
+- Messages: red first, several cycle every 3 s, red flashes for its first 10 s then holds [Official rule]. Message texts ("ABS fault / See dealer", "Service due / In 1,000 km") are placeholders for Sukhman's review. "Rear ABS / Inactive" shows when the ABS level is 3 or lower (Race A and Race B).
+- Indicators self-cancel after 0.5 km (placeholder). DRL is on while the engine runs; high beam takes its slot.
+- Menus close after 10 s without a press (placeholder). Clock is device time.
+- Start steps (Sukhman's change, page chrome): until the bike first moves, a row under the cluster lists the five steps (K ignition, Enter start, L side stand up, E 1st gear, W throttle), ticks the done ones and highlights the next. The hint line explains why W does nothing in neutral, and asks for a click when an embedded page has no keyboard focus.
+- Shift indicator (Sukhman's change): an amber shift zone on the scale ring from the riding mode's suggested upshift point to the red zone, and an amber up arrow above the gear when the engine reaches it (down arrow under GEAR when it labours below 3,000 rpm in 2nd or higher with the throttle open). Suggested points [Placeholder]: Road 9,000, Wet 7,500, Sport 11,000, Race A and B 13,500 rpm. The best-acceleration point is close to the limiter, so the white shift cue at 13,500 stays as before.
+- Views: Trip (distance, average speed, time), Odometer (total, average use), Temperatures (air, coolant), Rider aids (DTC, DWC, ABS), Navigation (not connected, accessories are out).
 
 ## What is NOT decided yet (flagged, Sukhman: "I'll cover this later")
 - S3 inputs beyond the keyboard (decided: keyboard only)

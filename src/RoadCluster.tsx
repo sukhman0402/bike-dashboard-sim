@@ -47,6 +47,7 @@ const BW = 14.76;
 const RN = RM + BW / 2 + 5.5; // numeral radius, just outside the band (where the dotted ring was)
 const RT = RM - BW / 2 - 1.2; // outer edge of the tick ring, just inside the band
 const RED_FROM = 15000; // red zone start (functional spec section 8, unverified)
+const SHIFT_AMBER = "#FFBF00"; // shift zone and shift arrow [Placeholder colour, same amber as the menu highlight]
 const A0 = -120;
 const A1 = 120;
 const xy = (deg: number, r: number): [number, number] => {
@@ -60,7 +61,7 @@ const arcD = (a0: number, a1: number, r = RM) => {
 };
 const rpmDeg = (rpm: number) => A0 + (A1 - A0) * Math.min(1, Math.max(0, rpm / RPM_MAX));
 
-function RpmArc({ rpm, shift, limiter, blink }: { rpm: number; shift: boolean; limiter: boolean; blink: boolean }) {
+function RpmArc({ rpm, shift, limiter, blink, shiftAt }: { rpm: number; shift: boolean; limiter: boolean; blink: boolean; shiftAt: number }) {
   const end = rpmDeg(rpm);
   const white = shift && blink && !limiter;
   const fill = limiter ? "#FF2A1F" : white ? "#FFFFFF" : "url(#rpm-grad)";
@@ -85,6 +86,8 @@ function RpmArc({ rpm, shift, limiter, blink }: { rpm: number; shift: boolean; l
       })}
       {/* scale ring inside the band (detail from the Ducati Scrambler dial): a fine tick every 500 rpm, a longer
           one every 1,000, red in the red zone (15,000 to 16,000, functional spec section 8, unverified) */}
+      {/* shift zone: amber from the riding mode's suggested upshift point to the red zone (Sukhman: show the right rpm to shift) */}
+      <path d={arcD(rpmDeg(shiftAt), rpmDeg(RED_FROM), RT)} stroke={SHIFT_AMBER} strokeWidth={1.3} fill="none" />
       <path d={arcD(rpmDeg(RED_FROM), A1, RT)} stroke="#CC0000" strokeWidth={1.3} fill="none" />
       {Array.from({ length: RPM_MAX / 500 + 1 }, (_, i) => {
         const r = i * 500;
@@ -92,7 +95,7 @@ function RpmArc({ rpm, shift, limiter, blink }: { rpm: number; shift: boolean; l
         const a = rpmDeg(r);
         const [x0, y0] = xy(a, RT);
         const [x1, y1] = xy(a, RT - (major ? 4.2 : 2.4));
-        const color = r >= RED_FROM ? "#FF2A1F" : major ? "#FFFFFF" : "#8C8C8C";
+        const color = r >= RED_FROM ? "#FF2A1F" : r >= shiftAt ? SHIFT_AMBER : major ? "#FFFFFF" : "#8C8C8C";
         return <line key={i} x1={x0} y1={y0} x2={x1} y2={y1} stroke={color} strokeWidth={major ? 0.9 : 0.6} />;
       })}
       {Array.from({ length: 9 }, (_, i) => {
@@ -200,13 +203,23 @@ function ModePanel({ state }: { state: ClusterState }) {
 
 // One press away (approved list): the views open in the left block, the same place messages use.
 const VIEWS = ["Trip", "Odometer", "Temperatures", "Rider aids", "Navigation"];
-function ViewsPanel({ view }: { view: number }) {
-  const rows: [string, string, string][] = [["Distance", "118.4", "km"], ["Average", "46", "km/h"], ["Time", "1:42", "h"]];
+const hm = (s: number) => `${Math.floor(s / 3600)}:${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}`;
+function viewRows(state: ClusterState, view: number): [string, string, string][] {
+  const t = state.trip;
+  switch (view) {
+    case 0: return [["Distance", t.tripKm.toFixed(1), "km"], ["Average", String(Math.round(t.avgKmh)), "km/h"], ["Time", hm(t.tripS), "h"]];
+    case 1: return [["Total", Math.floor(t.odoKm).toLocaleString("en-GB"), "km"], ["Average use", t.avgL100.toFixed(1), "L/100 km"]];
+    case 2: return [["Air", String(state.ambientTempC), "°C"], ["Coolant", String(state.coolantC), "°C"]];
+    case 3: return [["DTC", String(state.levels.dtc), ""], ["DWC", String(state.levels.dwc), ""], ["ABS", String(state.levels.abs), ""]];
+    default: return [["Route", "None", ""], ["Phone", "Not paired", ""]];
+  }
+}
+function ViewsPanel({ state, view }: { state: ClusterState; view: number }) {
   return (
     <div className="views" style={{ left: 40, top: 60 }}>
       <p className="v-title">{VIEWS[view]}</p>
-      {rows.map(([l, v, u]) => (
-        <p className="v-row" key={l}><span className="v-lab">{l}</span><span className="v-val">{v}<small>{u}</small></span></p>
+      {viewRows(state, view).map(([l, v, u]) => (
+        <p className="v-row" key={l}><span className="v-lab">{l}</span><span className="v-val">{v}{u && <small>{u}</small>}</span></p>
       ))}
       <p className="v-dots">{VIEWS.map((n, i) => <i key={n} className={i === view ? "on" : undefined} />)}</p>
     </div>
@@ -216,6 +229,7 @@ function ViewsPanel({ view }: { view: number }) {
 // Source: Figma file 7h8baVVBXfCwBsWUUHjD3N, node 1:52565 "Road Mode- 01" (slide 31, Interface 03).
 // Native size 610 x 225.4 px. Every Figma element sits at the position and size taken from the frame.
 export function RoadCluster({ state }: { state: ClusterState }) {
+  if (state.screen.kind === "off") return <div className="cluster" role="img" aria-label="Simulated instrument panel, ignition off" />;
   if (state.screen.kind === "splash") {
     return (
       <div className="cluster" role="img" aria-label="Simulated instrument panel starting">
@@ -258,10 +272,10 @@ export function RoadCluster({ state }: { state: ClusterState }) {
       )}
       {s.kind === "params" && <ParamPanel state={state} />}
       {s.kind === "modes" && <ModePanel state={state} />}
-      {s.kind === "views" && <ViewsPanel view={s.view} />}
+      {s.kind === "views" && <ViewsPanel state={state} view={s.view} />}
 
       {/* centre: speed arc, speed, unit, turn arrows, mode */}
-      <RpmArc rpm={state.rpm} shift={state.shift === "shift"} limiter={limiter} blink={state.blink} />
+      <RpmArc rpm={state.rpm} shift={state.shift === "shift"} limiter={limiter} blink={state.blink} shiftAt={state.shiftAt} />
       <p className="t t-speed">{state.speedKmh}</p>
       <p className="t t-unit">km/h</p>
       {state.demo && <img className="a" src={arrows} alt="" style={{ left: 276.58, top: 141.8, width: 56.99, height: 17.43 }} />}
@@ -272,6 +286,9 @@ export function RoadCluster({ state }: { state: ClusterState }) {
       {/* right: gear and scroll arrows. Gear is green in neutral, red while the limiter flashes. */}
       <p className={`t t-gear${neutral ? " gear-n" : ""}${limiter && state.blink ? " gear-limit" : ""}`}>{test ? "N" : state.gear}</p>
       <p className="t t-gearlabel">GEAR</p>
+      {/* gear-shift suggestion: up arrow above the gear, down arrow under GEAR */}
+      {state.shiftHint === "up" && <span className="a shift-arrow up" aria-hidden="true" />}
+      {state.shiftHint === "down" && <span className="a shift-arrow down" aria-hidden="true" />}
       <img className="a hint" src={scrollRight} alt="" style={{ left: 589.28, top: 96.48, width: 11.34, height: 32.65 }} />
 
       {/* bottom row: tell-tales (dark until their event), fuel, temperature bar */}

@@ -5,7 +5,7 @@ import { PREVIEWS } from "./previews";
 
 const NATIVE_W = 610;
 const NATIVE_H = 225.41;
-const CHROME_H = 170; // vertical room kept for the simulation label and the key hints
+const CHROME_H = 300; // vertical room kept for the simulation label, start steps, hint line and key groups
 
 // Scales the fixed-size cluster to fit the window while keeping its proportions.
 function useFitScale(maxScale: number) {
@@ -20,12 +20,49 @@ function useFitScale(maxScale: number) {
   return scale;
 }
 
-const KEYS: { keys: string[]; action: string }[] = [
-  { keys: ["W", "↑"], action: "Throttle" },
-  { keys: ["S", "↓"], action: "Brake" },
-  { keys: ["E"], action: "Shift up" },
-  { keys: ["Q"], action: "Shift down" },
-  { keys: ["N"], action: "Neutral" },
+// Key groups (functional spec section 7). Demo keys trigger events until the riding world exists (Stage 5).
+const KEY_GROUPS: { title: string; keys: { keys: string[]; action: string }[] }[] = [
+  {
+    title: "Ride",
+    keys: [
+      { keys: ["K"], action: "Ignition" },
+      { keys: ["Enter"], action: "Start" },
+      { keys: ["W"], action: "Throttle" },
+      { keys: ["S"], action: "Brake" },
+      { keys: ["Space"], action: "Clutch" },
+      { keys: ["E", "Q"], action: "Shift up, down" },
+      { keys: ["N"], action: "Neutral" },
+      { keys: ["L"], action: "Side stand" },
+      { keys: ["X"], action: "Kill switch" },
+    ],
+  },
+  {
+    title: "Handlebar",
+    keys: [
+      { keys: [",", "."], action: "Indicators" },
+      { keys: ["H"], action: "Hazard" },
+      { keys: ["B"], action: "High beam" },
+    ],
+  },
+  {
+    title: "Dash",
+    keys: [
+      { keys: ["↑", "↓"], action: "Views, scroll" },
+      { keys: ["→"], action: "Select" },
+      { keys: ["←"], action: "Back" },
+      { keys: ["M"], action: "Riding mode" },
+    ],
+  },
+  {
+    title: "Demo",
+    keys: [
+      { keys: ["1"], action: "Ice" },
+      { keys: ["2"], action: "Oil pressure" },
+      { keys: ["3"], action: "ABS fault" },
+      { keys: ["4"], action: "Low fuel" },
+      { keys: ["5"], action: "Service" },
+    ],
+  },
 ];
 
 export default function App() {
@@ -34,7 +71,7 @@ export default function App() {
   const preview = q.get("state") === "figma" ? "figma" : q.get("preview");
   const frozen = preview !== null && preview in PREVIEWS;
   const live = useCluster(frozen);
-  const state = frozen ? PREVIEWS[preview!] : live;
+  const state = frozen ? PREVIEWS[preview!] : live.state;
   const scale = useFitScale(2.4);
   return (
     <main className="stage">
@@ -47,14 +84,33 @@ export default function App() {
           <RoadCluster state={state} />
         </div>
       </div>
-      <footer className="key-hints" aria-label="Keyboard controls">
-        {KEYS.map(({ keys, action }) => (
-          <span className="key-hint" key={action}>
-            {keys.map((k) => (
-              <kbd key={k}>{k}</kbd>
+      {!frozen && live.steps && (
+        <ol className="start-steps" aria-label="How to start riding">
+          {live.steps.map((st, i) => {
+            const current = !st.done && live.steps!.slice(0, i).every((x) => x.done);
+            return (
+              <li key={st.key} className={st.done ? "done" : current ? "now" : undefined}>
+                <kbd>{st.key}</kbd>
+                {st.label}
+              </li>
+            );
+          })}
+        </ol>
+      )}
+      {!frozen && <p className="sim-hint" role="status">{live.hint}</p>}
+      <footer className="key-groups" aria-label="Keyboard controls">
+        {KEY_GROUPS.map((g) => (
+          <section className="key-group" key={g.title} aria-label={g.title}>
+            <h2>{g.title}</h2>
+            {g.keys.map(({ keys, action }) => (
+              <span className="key-hint" key={action}>
+                {keys.map((k) => (
+                  <kbd key={k}>{k}</kbd>
+                ))}
+                {action}
+              </span>
             ))}
-            {action}
-          </span>
+          </section>
         ))}
       </footer>
     </main>

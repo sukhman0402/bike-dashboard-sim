@@ -10,8 +10,7 @@ Read this first in every session. Keep it short and current.
 
 ## Status (update when it changes)
 - Stage 1 APPROVED and pushed: keyboard input, scripted engine and gearbox model, RPM arc, simulation label, key hints. Its gear speeds are placeholders and will be replaced by the real V4 S ratios (Stage 2b).
-- State-driven values: speed, RPM arc, gear (`src/clusterState.ts`, `src/vehicleModel.ts`, `src/useCluster.ts`). Clock, air temperature and mode are fixed Figma values.
-- Fuel, oil/temperature bars and tell-tales are still static Figma art.
+- Stage 2b APPROVED and pushed (plan: `plans/pending/stage-2b-dashboard-logic.md`): real V4 S engine and gearbox, key-on and start rules, switches, dash menus, trip and fuel, messages and demo event keys. Everything on the cluster is now state driven. Open follow-up: per-gear shift points (Sukhman flagged). Private preview: https://claude.ai/artifact/PMFPNCMZHqWm5hsU4q4ahN (republish after each approved stage).
 - Inputs: keyboard only (decided). Page design, scenarios and testing use (S4 to S6) are NOT decided. Ask before building them.
 - Decided: bike is the Ducati Panigale V4 S (MY25 data). Simulator must follow the real interface IA and real values. Rear ABS Inactive and the bottom tell-tales are demo placement, they light only on a fault or event.
 - RE-DESIGN CLARIFIED: it is a REFINEMENT of Road Mode 01, not a new design. Keep the central arc dial with speed inside, gear right, ROAD under the arc, left message block, bottom lamp row, top row. Change only spacing, small elements and the approved information (fuel with range, air, clock always on; navigation one press away). Refinements are in `src/RoadCluster.tsx` and logged in `README.md`, including Sukhman's flagged changes (shared headlight slot, arc with round ends and equal 2,000 rpm divisions with numerals outside, no dotted ring, scale ring with 500 rpm ticks, red zone and pointer (from a Scrambler dial reference), wider speed and gear label spacing, left block shows an issue, else a quiet status line "Systems OK / Ride safe" (approved)); previews `?preview=r-rest`, `r-ready`, `r-fuel`, `r-ice`, `r-oil`, `r-views`, `r-check`. APPROVED and committed (rounds 1 to 4). The studies below are research only, superseded as designs.
@@ -26,12 +25,14 @@ Read this first in every session. Keep it short and current.
 - `npm run dev` : dev server (Vite, default port 5173)
 - `npm run build` : type-check + static build into `dist/` (about 1 s)
 - `npm run preview` : serve `dist/`
+- `node scripts/check-model.ts` : headless check of the engine model against the measured 0 to 100, 0 to 200 and top speed
 - No test runner is set up. Check changes by building, then comparing a screenshot against `reference/figma-road-mode-01.png`.
 
 ## File map
 - `src/App.tsx` : fits the cluster to the window (`useFitScale`, max scale 2.4), simulation label, key hints
-- `src/useCluster.ts` : keyboard handling and the frame loop
-- `src/vehicleModel.ts` : scripted engine and gearbox model (placeholder numbers)
+- `src/useCluster.ts` : keyboard map (spec section 7) and the frame loop
+- `src/vehicleModel.ts` : engine and gearbox model (real V4 S gearing and torque, fitted drag; no imports so it runs headless)
+- `src/bikeState.ts` : ignition, start rules, switches, dash menus, trip, fuel, temperatures, messages; `toCluster` turns it into `ClusterState`
 - `src/RoadCluster.tsx` : absolutely positioned Figma elements; text comes from `ClusterState`
 - `src/clusterState.ts` : `ClusterState` type and `FIGMA_DEFAULT` (56 km/h, gear 3, 09:16 A.M., 24 C)
 - `src/cluster.css`, `src/index.css` : styles

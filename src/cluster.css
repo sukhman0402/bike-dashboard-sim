@@ -129,3 +129,6 @@
 .cluster .t-sub { color: #BEBEBE; }
 .cluster .t-status { left: 107px; top: 93px; font-size: 13.5px; letter-spacing: -0.4px; color: #FFFFFF; white-space: nowrap; }
 .cluster .t-status.t-sub { top: 110px; color: #BEBEBE; }
+.cluster .shift-arrow { left: 486.55px; width: 0; height: 0; transform: translateX(-50%); border-left: 9px solid transparent; border-right: 9px solid transparent; }
+.cluster .shift-arrow.up { top: 36px; border-bottom: 11px solid #FFBF00; }
+.cluster .shift-arrow.down { top: 150px; border-top: 11px solid #FFBF00; }

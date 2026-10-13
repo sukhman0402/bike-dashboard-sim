@@ -1,63 +1,123 @@
-import { RPM_MAX } from "./clusterState";
+// Engine and gearbox model of the Ducati Panigale V4 S (MY25), driven by the keyboard.
+// Sources: functional spec section 3. [Official] values are marked; the rest are fitted or placeholders.
+// This file has no imports so it can also run headless (scripts/check-model.ts).
 
-// Scripted motorcycle model. Every number below is a PLACEHOLDER chosen to feel plausible.
-// None of it is measured from, or claims to represent, a real motorcycle.
-export const IDLE_RPM = 1300;
-const LIMITER = 0.97; // rev limiter, as a fraction of RPM_MAX
-const GEAR_TOP_KMH = [0, 80, 115, 150, 185, 220, 255]; // speed at RPM_MAX in each gear (index = gear)
-const GEAR_ACCEL = [0, 38, 30, 24, 19, 15, 12]; // km/h per s at full throttle and low speed
-const ENGINE_BRAKE = 6; // km/h per s with the throttle closed, in gear
-const DRAG = 0.0006; // km/h per s per (km/h)^2
-const BRAKE = 45; // km/h per s
-const COAST_NEUTRAL = 1.5; // km/h per s rolling in neutral
-const REV_UP = 9000; // rpm per s, throttle open in neutral
-const REV_DOWN = 6000; // rpm per s, throttle closed in neutral
-const RPM_FOLLOW = 15000; // rpm per s, how fast the needle chases the engine speed in gear
-
+export type PowerMode = "High" | "Medium" | "Low";
 export type Gear = number | "N";
-export type Vehicle = { speedKmh: number; rpm: number; gear: Gear };
-export type Controls = { throttle: boolean; brake: boolean };
 
-export const START: Vehicle = { speedKmh: 0, rpm: IDLE_RPM, gear: "N" };
+// speedKmh is the true road speed. The dash shows it 5% high (see shownKmh).
+export type Vehicle = { speedKmh: number; rpm: number; gear: Gear; throttle: number; running: boolean };
+export type Controls = { throttle: boolean; brake: boolean; clutch: boolean };
+export type Setup = { power: PowerMode; dwc: number | "OFF" };
 
+// Gearing [Official]
+const PRIMARY = 1.8;
+const FINAL = 41 / 16;
+const RATIO = [0, 36 / 15, 34 / 17, 33 / 19, 32 / 21, 30 / 22, 27 / 22];
+const WHEEL_CIRC = 2.08; // m, 200/60 ZR17 rolling circumference [Inferred, cross-checked against top speed]
+const WHEEL_R = WHEEL_CIRC / (2 * Math.PI);
+
+// Engine
+export const IDLE_RPM = 1300; // [Placeholder]
+export const SHIFT_RPM = 13500; // shift cue at peak power (functional spec section 8, unverified)
+export const LIMIT_RPM = 15000; // rev limiter (functional spec section 8, unverified)
+// Torque curve: 120.9 Nm at 11,250 and 158.9 kW at 13,500 (112.4 Nm) [Official]; 80% of peak at 6,000 [Official];
+// the low and top ends are [Placeholder].
+const TORQUE: [number, number][] = [
+  [0, 50], [1300, 55], [3000, 72], [6000, 96.7], [9000, 113], [11250, 120.9], [13500, 112.4], [15000, 98], [16000, 90],
+];
+
+// Bike and rider [Inferred / fitted]
+const MASS = 280; // kg: 187 kg wet without fuel [Official] + fuel + 80 kg rider
+const DRIVE_EFF = 0.82; // chain and gearbox losses, fitted to the measured 0 to 100 and 0 to 200 times
+const RHO = 1.2;
+const CDA = 0.37; // m2, fitted so the bike tops out near 300 km/h
+const CRR = 0.015;
+const G = 9.81;
+const BRAKE_DECEL = 9.3; // m/s2, about 0.95 g with ABS [Placeholder]
+
+// Power modes [Placeholder]: Ducati does not publish the Medium and Low figures.
+export const POWER_SCALE: Record<PowerMode, number> = { High: 1, Medium: 0.88, Low: 0.7 };
+const THROTTLE_OPEN_S: Record<PowerMode, number> = { High: 0.35, Medium: 0.5, Low: 0.7 }; // twist time, closed to open
+const THROTTLE_CLOSE_S = 0.15;
+const LAUNCH_RPM = 7500; // clutch slip target when pulling away [Placeholder]
+
+export const START: Vehicle = { speedKmh: 0, rpm: 0, gear: "N", throttle: 0, running: false };
+
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const approach = (value: number, target: number, maxStep: number) =>
   value < target ? Math.min(target, value + maxStep) : Math.max(target, value - maxStep);
 
-const limiterKmh = (gear: number) => GEAR_TOP_KMH[gear] * LIMITER;
+export function torqueAt(rpm: number): number {
+  for (let i = 1; i < TORQUE.length; i++) {
+    const [r1, t1] = TORQUE[i];
+    if (rpm <= r1) {
+      const [r0, t0] = TORQUE[i - 1];
+      return lerp(t0, t1, (rpm - r0) / (r1 - r0));
+    }
+  }
+  return TORQUE[TORQUE.length - 1][1];
+}
 
-// A gear can be engaged only if it would not over-rev the engine.
-const canEngage = (gear: number, speedKmh: number) => speedKmh <= limiterKmh(gear);
+const overall = (gear: number) => PRIMARY * RATIO[gear] * FINAL;
+export const rpmFor = (speedKmh: number, gear: number) => (speedKmh / 3.6 / WHEEL_CIRC) * 60 * overall(gear);
+
+// Wheelie control caps the forward pull; a higher DWC level intervenes earlier [Placeholder].
+const maxAccel = (dwc: Setup["dwc"]) => (dwc === "OFF" ? 9.4 : 9.0 - 0.15 * dwc);
+
+// The dash reads 5% high [Official], so it never shows less than the true speed (UN R39).
+export const shownKmh = (v: Vehicle) => Math.round(v.speedKmh * 1.05);
+
+// A gear is refused if it would push the engine past the limiter.
+const fits = (gear: number, v: Vehicle) => rpmFor(v.speedKmh, gear) < LIMIT_RPM;
 
 export function shiftUp(v: Vehicle): Vehicle {
   const next = v.gear === "N" ? 1 : Math.min(6, v.gear + 1);
-  return canEngage(next, v.speedKmh) ? { ...v, gear: next } : v;
+  return fits(next, v) ? { ...v, gear: next } : v;
 }
 
 export function shiftDown(v: Vehicle): Vehicle {
   if (v.gear === "N" || v.gear === 1) return v;
   const next = v.gear - 1;
-  return canEngage(next, v.speedKmh) ? { ...v, gear: next } : v;
+  return fits(next, v) ? { ...v, gear: next } : v;
 }
 
-export const shiftNeutral = (v: Vehicle): Vehicle => ({ ...v, gear: "N" });
+// Neutral sits between 1st and 2nd on the real gearbox, so it is found from 1st or 2nd only.
+export const shiftNeutral = (v: Vehicle): Vehicle => (v.gear === 1 || v.gear === 2 ? { ...v, gear: "N" } : v);
 
-export function step(v: Vehicle, c: Controls, dt: number): Vehicle {
-  if (v.gear === "N") {
-    const decel = COAST_NEUTRAL + DRAG * v.speedKmh ** 2 + (c.brake ? BRAKE : 0);
-    const target = c.throttle ? RPM_MAX * LIMITER : IDLE_RPM;
-    const rate = target > v.rpm ? REV_UP : REV_DOWN;
-    return {
-      ...v,
-      speedKmh: Math.max(0, v.speedKmh - decel * dt),
-      rpm: approach(v.rpm, target, rate * dt),
-    };
+function substep(v: Vehicle, c: Controls, s: Setup, dt: number): Vehicle {
+  const throttle = approach(v.throttle, c.throttle && v.running ? 1 : 0, dt / (c.throttle ? THROTTLE_OPEN_S[s.power] : THROTTLE_CLOSE_S));
+  const ms = v.speedKmh / 3.6;
+  const resist = 0.5 * RHO * CDA * ms * ms + (ms > 0 ? CRR * MASS * G : 0) + (c.brake && ms > 0 ? BRAKE_DECEL * MASS : 0);
+
+  // Engine free of the wheel: neutral, clutch pulled, or engine off.
+  const free = v.gear === "N" || c.clutch || !v.running;
+  let rpm: number;
+  let drive = 0;
+  if (free) {
+    const target = !v.running ? 0 : throttle > 0.02 ? IDLE_RPM + throttle * (LIMIT_RPM - IDLE_RPM) : IDLE_RPM;
+    rpm = approach(v.rpm, target, (target > v.rpm ? 14000 : 7000) * dt);
+  } else {
+    const gear = v.gear as number;
+    const wheelRpm = rpmFor(v.speedKmh, gear);
+    // Pulling away: the clutch slips until the wheel catches up with the engine.
+    const slipRpm = gear === 1 || wheelRpm < IDLE_RPM ? IDLE_RPM + throttle * (LAUNCH_RPM - IDLE_RPM) : 0;
+    rpm = Math.max(wheelRpm, slipRpm, IDLE_RPM);
+    const cut = rpm >= LIMIT_RPM; // limiter cuts the drive
+    const engineTorque = cut ? 0 : throttle * torqueAt(rpm) * POWER_SCALE[s.power] - (1 - throttle) * (8 + 0.0015 * rpm);
+    drive = (engineTorque * overall(gear) * DRIVE_EFF) / WHEEL_R;
   }
 
-  const top = GEAR_TOP_KMH[v.gear];
-  const accel = c.throttle ? GEAR_ACCEL[v.gear] * Math.max(0, 1 - (v.speedKmh / top) ** 4) : 0;
-  const decel =
-    DRAG * v.speedKmh ** 2 + (c.throttle || v.speedKmh === 0 ? 0 : ENGINE_BRAKE) + (c.brake ? BRAKE : 0);
-  const speedKmh = Math.min(limiterKmh(v.gear), Math.max(0, v.speedKmh + (accel - decel) * dt));
-  const target = Math.max(IDLE_RPM, (speedKmh / top) * RPM_MAX);
-  return { ...v, speedKmh, rpm: approach(v.rpm, target, RPM_FOLLOW * dt) };
+  let accel = (drive - resist) / MASS;
+  accel = Math.min(accel, maxAccel(s.dwc));
+  const speedKmh = Math.max(0, (ms + accel * dt) * 3.6);
+  if (!free) rpm = Math.max(rpm, rpmFor(speedKmh, v.gear as number));
+  return { ...v, throttle, speedKmh, rpm: v.running ? Math.min(rpm, LIMIT_RPM + 150) : rpm };
+}
+
+export function step(v: Vehicle, c: Controls, s: Setup, dt: number): Vehicle {
+  const n = Math.max(1, Math.ceil(dt / 0.005));
+  let out = v;
+  for (let i = 0; i < n; i++) out = substep(out, c, s, dt / n);
+  return out;
 }
