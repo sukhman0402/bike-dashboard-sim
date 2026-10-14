@@ -43,8 +43,9 @@ export type ClusterState = {
   lamps: Partial<Record<LampId, Lamp>>;
   turn: { left: boolean; right: boolean };
   shift: ShiftState;
-  shiftAt: number; // suggested upshift rpm for the riding mode, drawn as the shift zone on the scale [Placeholder]
-  shiftHint: "up" | "down" | null; // gear-shift suggestion beside the gear
+  shiftFrom: number; // shift-up cue rpm; the amber bracket on the scale runs from here to redFrom
+  redFrom: number; // red zone start: the engaged gear's limiter, or the cold-engine limit while the engine warms up
+  shiftHint: "up" | null; // gear-shift indication (Ducati: green lamp) beside the gear
   message: DashMessage | null;
   levels: Levels;
   screen: Screen;
@@ -58,10 +59,6 @@ export type ClusterState = {
 export const RPM_MAX = 16000;
 
 // Riding mode defaults for the V4 S, MY25 owner's manual (functional spec section 5).
-// Suggested upshift rpm per riding mode [Placeholder]: an easy commute point in Road and Wet, near peak power in
-// Sport and Race. The best-acceleration point is close to the limiter, which the white shift cue at 13,500 marks.
-export const SHIFT_AT: Record<RidingMode, number> = { "RACE A": 13500, "RACE B": 13500, SPORT: 11000, ROAD: 9000, WET: 7500 };
-
 export const MODE_DEFAULTS: Record<RidingMode, { power: "High" | "Medium" | "Low"; levels: Levels }> = {
   "RACE A": { power: "High", levels: { dtc: 2, dsc: 1, dwc: 2, ebc: 2, abs: 1 } },
   "RACE B": { power: "High", levels: { dtc: 3, dsc: 2, dwc: 3, ebc: 2, abs: 3 } },
@@ -86,7 +83,8 @@ export const LIVE_DEFAULT: ClusterState = {
   lamps: {},
   turn: { left: false, right: false },
   shift: "off",
-  shiftAt: 9000,
+  shiftFrom: 13500,
+  redFrom: 14500,
   shiftHint: null,
   message: null,
   levels: MODE_DEFAULTS.ROAD.levels,

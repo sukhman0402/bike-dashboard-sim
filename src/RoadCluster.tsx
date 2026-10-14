@@ -45,8 +45,8 @@ const AC = { x: 96, y: 95.15 };
 const RM = 80.62;
 const BW = 14.76;
 const RN = RM + BW / 2 + 5.5; // numeral radius, just outside the band (where the dotted ring was)
+const WAKE_MIN_RPM = 1500; // [Placeholder] just above idle
 const RT = RM - BW / 2 - 1.2; // outer edge of the tick ring, just inside the band
-const RED_FROM = 15000; // red zone start (functional spec section 8, unverified)
 const SHIFT_AMBER = "#FFBF00"; // shift zone and shift arrow [Placeholder colour, same amber as the menu highlight]
 const A0 = -120;
 const A1 = 120;
@@ -61,10 +61,14 @@ const arcD = (a0: number, a1: number, r = RM) => {
 };
 const rpmDeg = (rpm: number) => A0 + (A1 - A0) * Math.min(1, Math.max(0, rpm / RPM_MAX));
 
-function RpmArc({ rpm, shift, limiter, blink, shiftAt }: { rpm: number; shift: boolean; limiter: boolean; blink: boolean; shiftAt: number }) {
+function RpmArc({ rpm, shift, limiter, shiftFrom, redFrom }: { rpm: number; shift: boolean; limiter: boolean; shiftFrom: number; redFrom: number }) {
   const end = rpmDeg(rpm);
-  const white = shift && blink && !limiter;
-  const fill = limiter ? "#FF2A1F" : white ? "#FFFFFF" : "url(#rpm-grad)";
+  // The wake and pointer stay hidden at idle, so a bike standing still reads empty (Sukhman's change). The real dash
+  // hides the wake below 1,000 rpm [Official]; here the cut-off sits above the 1,300 rpm idle.
+  const wake = rpm >= WAKE_MIN_RPM;
+  // Wake colours: amber at the shift-up point, red at the limiter. Held steady, no blink (Sukhman's change; the Ducati
+  // wake blinks).
+  const fill = limiter ? "#FF2A1F" : shift ? SHIFT_AMBER : "url(#rpm-grad)";
   return (
     <svg className="a" viewBox="0 0 190 144" style={{ ...ARC_BOX, overflow: "visible" }} aria-hidden="true">
       <defs>
@@ -75,8 +79,8 @@ function RpmArc({ rpm, shift, limiter, blink, shiftAt }: { rpm: number; shift: b
       </defs>
       <path d={arcD(A0, A1)} stroke="#3F3F3F" strokeWidth={BW} strokeLinecap="round" fill="none" />
       {/* the fill starts with the arc's round cap and ends square, so its edge reads the exact rpm and never covers a numeral */}
-      {rpm > 0 && <circle cx={xy(A0, RM)[0]} cy={xy(A0, RM)[1]} r={BW / 2} fill={fill} />}
-      {rpm > 0 && <path d={arcD(A0, Math.max(end, A0 + 0.01))} stroke={fill} strokeWidth={BW} strokeLinecap="butt" fill="none" />}
+      {wake && <circle cx={xy(A0, RM)[0]} cy={xy(A0, RM)[1]} r={BW / 2} fill={fill} />}
+      {wake && <path d={arcD(A0, Math.max(end, A0 + 0.01))} stroke={fill} strokeWidth={BW} strokeLinecap="butt" fill="none" />}
       {/* divisions: equal 2,000 rpm segments, each cut lines up with its numeral (outside the arc) */}
       {Array.from({ length: 7 }, (_, i) => {
         const a = rpmDeg((i + 1) * 2000);
@@ -86,16 +90,17 @@ function RpmArc({ rpm, shift, limiter, blink, shiftAt }: { rpm: number; shift: b
       })}
       {/* scale ring inside the band (detail from the Ducati Scrambler dial): a fine tick every 500 rpm, a longer
           one every 1,000, red in the red zone (15,000 to 16,000, functional spec section 8, unverified) */}
-      {/* shift zone: amber from the riding mode's suggested upshift point to the red zone (Sukhman: show the right rpm to shift) */}
-      <path d={arcD(rpmDeg(shiftAt), rpmDeg(RED_FROM), RT)} stroke={SHIFT_AMBER} strokeWidth={1.3} fill="none" />
-      <path d={arcD(rpmDeg(RED_FROM), A1, RT)} stroke="#CC0000" strokeWidth={1.3} fill="none" />
+      {/* shift bracket (amber) from the shift-up point to the engaged gear's limiter, then the red zone. Both move with
+          the gear and with engine temperature (Ducati rules, see README) */}
+      {shiftFrom < redFrom && <path d={arcD(rpmDeg(shiftFrom), rpmDeg(redFrom), RT)} stroke={SHIFT_AMBER} strokeWidth={1.3} fill="none" />}
+      <path d={arcD(rpmDeg(redFrom), A1, RT)} stroke="#CC0000" strokeWidth={1.3} fill="none" />
       {Array.from({ length: RPM_MAX / 500 + 1 }, (_, i) => {
         const r = i * 500;
         const major = r % 1000 === 0;
         const a = rpmDeg(r);
         const [x0, y0] = xy(a, RT);
         const [x1, y1] = xy(a, RT - (major ? 4.2 : 2.4));
-        const color = r >= RED_FROM ? "#FF2A1F" : r >= shiftAt ? SHIFT_AMBER : major ? "#FFFFFF" : "#8C8C8C";
+        const color = r >= redFrom ? "#FF2A1F" : r >= shiftFrom ? SHIFT_AMBER : major ? "#FFFFFF" : "#8C8C8C";
         return <line key={i} x1={x0} y1={y0} x2={x1} y2={y1} stroke={color} strokeWidth={major ? 0.9 : 0.6} />;
       })}
       {Array.from({ length: 9 }, (_, i) => {
@@ -107,10 +112,10 @@ function RpmArc({ rpm, shift, limiter, blink, shiftAt }: { rpm: number; shift: b
         );
       })}
       {/* pointer at the end of the wake (official: pointer plus filled wake), across the band and the scale ring */}
-      {rpm > 0 && (() => {
+      {wake && (() => {
         const [x0, y0] = xy(end, RT - 4.2);
         const [x1, y1] = xy(end, RM + BW / 2);
-        return <line x1={x0} y1={y0} x2={x1} y2={y1} stroke={white ? "#CC0000" : "#FFFFFF"} strokeWidth={1.8} strokeLinecap="round" />;
+        return <line x1={x0} y1={y0} x2={x1} y2={y1} stroke="#FFFFFF" strokeWidth={1.8} strokeLinecap="round" />;
       })()}
     </svg>
   );
@@ -275,7 +280,7 @@ export function RoadCluster({ state }: { state: ClusterState }) {
       {s.kind === "views" && <ViewsPanel state={state} view={s.view} />}
 
       {/* centre: speed arc, speed, unit, turn arrows, mode */}
-      <RpmArc rpm={state.rpm} shift={state.shift === "shift"} limiter={limiter} blink={state.blink} shiftAt={state.shiftAt} />
+      <RpmArc rpm={state.rpm} shift={state.shift === "shift"} limiter={limiter} shiftFrom={state.shiftFrom} redFrom={state.redFrom} />
       <p className="t t-speed">{state.speedKmh}</p>
       <p className="t t-unit">km/h</p>
       {state.demo && <img className="a" src={arrows} alt="" style={{ left: 276.58, top: 141.8, width: 56.99, height: 17.43 }} />}
@@ -284,11 +289,10 @@ export function RoadCluster({ state }: { state: ClusterState }) {
       <p className="t t-mode" style={MODE_STYLE[state.mode]}>{state.mode}</p>
 
       {/* right: gear and scroll arrows. Gear is green in neutral, red while the limiter flashes. */}
-      <p className={`t t-gear${neutral ? " gear-n" : ""}${limiter && state.blink ? " gear-limit" : ""}`}>{test ? "N" : state.gear}</p>
+      <p className={`t t-gear${neutral ? " gear-n" : ""}${limiter ? " gear-limit" : ""}`}>{test ? "N" : state.gear}</p>
       <p className="t t-gearlabel">GEAR</p>
-      {/* gear-shift suggestion: up arrow above the gear, down arrow under GEAR */}
+      {/* gear-shift indication above the gear (Ducati: green lamp) */}
       {state.shiftHint === "up" && <span className="a shift-arrow up" aria-hidden="true" />}
-      {state.shiftHint === "down" && <span className="a shift-arrow down" aria-hidden="true" />}
       <img className="a hint" src={scrollRight} alt="" style={{ left: 589.28, top: 96.48, width: 11.34, height: 32.65 }} />
 
       {/* bottom row: tell-tales (dark until their event), fuel, temperature bar */}

@@ -19,8 +19,11 @@ const WHEEL_R = WHEEL_CIRC / (2 * Math.PI);
 
 // Engine
 export const IDLE_RPM = 1300; // [Placeholder]
-export const SHIFT_RPM = 13500; // shift cue at peak power (functional spec section 8, unverified)
-export const LIMIT_RPM = 15000; // rev limiter (functional spec section 8, unverified)
+// Shift-up cue: 13,500 rpm at peak power (MY25 owner report; the 2019 Panigale V4 manual gives 13,000) [Inferred].
+export const SHIFT_RPM = 13500;
+// Rev limiter depends on the gear: "Maximum rpm: 14500 rpm / 15000 rpm (6th gear)" [Official, Panigale V4 and
+// Streetfighter V4 S manuals, technical data].
+export const limitFor = (gear: Gear) => (gear === 6 ? 15000 : 14500);
 // Torque curve: 120.9 Nm at 11,250 and 158.9 kW at 13,500 (112.4 Nm) [Official]; 80% of peak at 6,000 [Official];
 // the low and top ends are [Placeholder].
 const TORQUE: [number, number][] = [
@@ -40,7 +43,11 @@ const BRAKE_DECEL = 9.3; // m/s2, about 0.95 g with ABS [Placeholder]
 export const POWER_SCALE: Record<PowerMode, number> = { High: 1, Medium: 0.88, Low: 0.7 };
 const THROTTLE_OPEN_S: Record<PowerMode, number> = { High: 0.35, Medium: 0.5, Low: 0.7 }; // twist time, closed to open
 const THROTTLE_CLOSE_S = 0.15;
-const LAUNCH_RPM = 7500; // clutch slip target when pulling away [Placeholder]
+// Pulling away, the clutch slips: the engine runs above the wheel by up to CLUTCH_SLIP_RPM, and the slip fades out
+// by CLUTCH_LOCK_KMH. The fade is slower than the wheel speeds the engine up, so the needle only ever climbs
+// (Sukhman: the meter used to hold at 7,500 for 1 to 2 s). [Placeholder values]
+const CLUTCH_SLIP_RPM: Record<PowerMode, number> = { High: 5500, Medium: 3000, Low: 2500 }; // launch-style in Race
+const slipFadeKmh = (slip: number) => slip / 45; // slip fades 45 rpm per km/h while the wheel adds 89 in 1st, so the needle keeps climbing
 
 export const START: Vehicle = { speedKmh: 0, rpm: 0, gear: "N", throttle: 0, running: false };
 
@@ -69,7 +76,7 @@ const maxAccel = (dwc: Setup["dwc"]) => (dwc === "OFF" ? 9.4 : 9.0 - 0.15 * dwc)
 export const shownKmh = (v: Vehicle) => Math.round(v.speedKmh * 1.05);
 
 // A gear is refused if it would push the engine past the limiter.
-const fits = (gear: number, v: Vehicle) => rpmFor(v.speedKmh, gear) < LIMIT_RPM;
+const fits = (gear: number, v: Vehicle) => rpmFor(v.speedKmh, gear) < limitFor(gear);
 
 export function shiftUp(v: Vehicle): Vehicle {
   const next = v.gear === "N" ? 1 : Math.min(6, v.gear + 1);
@@ -95,15 +102,15 @@ function substep(v: Vehicle, c: Controls, s: Setup, dt: number): Vehicle {
   let rpm: number;
   let drive = 0;
   if (free) {
-    const target = !v.running ? 0 : throttle > 0.02 ? IDLE_RPM + throttle * (LIMIT_RPM - IDLE_RPM) : IDLE_RPM;
+    const target = !v.running ? 0 : throttle > 0.02 ? IDLE_RPM + throttle * (limitFor(v.gear) - IDLE_RPM) : IDLE_RPM;
     rpm = approach(v.rpm, target, (target > v.rpm ? 14000 : 7000) * dt);
   } else {
     const gear = v.gear as number;
     const wheelRpm = rpmFor(v.speedKmh, gear);
-    // Pulling away: the clutch slips until the wheel catches up with the engine.
-    const slipRpm = gear === 1 || wheelRpm < IDLE_RPM ? IDLE_RPM + throttle * (LAUNCH_RPM - IDLE_RPM) : 0;
-    rpm = Math.max(wheelRpm, slipRpm, IDLE_RPM);
-    const cut = rpm >= LIMIT_RPM; // limiter cuts the drive
+    const s0 = CLUTCH_SLIP_RPM[s.power];
+    const slip = throttle * s0 * Math.max(0, 1 - v.speedKmh / slipFadeKmh(s0));
+    rpm = Math.max(IDLE_RPM, wheelRpm + slip);
+    const cut = rpm >= limitFor(gear); // limiter cuts the drive
     const engineTorque = cut ? 0 : throttle * torqueAt(rpm) * POWER_SCALE[s.power] - (1 - throttle) * (8 + 0.0015 * rpm);
     drive = (engineTorque * overall(gear) * DRIVE_EFF) / WHEEL_R;
   }
@@ -112,7 +119,7 @@ function substep(v: Vehicle, c: Controls, s: Setup, dt: number): Vehicle {
   accel = Math.min(accel, maxAccel(s.dwc));
   const speedKmh = Math.max(0, (ms + accel * dt) * 3.6);
   if (!free) rpm = Math.max(rpm, rpmFor(speedKmh, v.gear as number));
-  return { ...v, throttle, speedKmh, rpm: v.running ? Math.min(rpm, LIMIT_RPM + 150) : rpm };
+  return { ...v, throttle, speedKmh, rpm: v.running ? Math.min(rpm, limitFor(v.gear) + 150) : rpm };
 }
 
 export function step(v: Vehicle, c: Controls, s: Setup, dt: number): Vehicle {

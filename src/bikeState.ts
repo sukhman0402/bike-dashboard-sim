@@ -2,10 +2,10 @@
 // trip computer, fuel, temperatures and messages. Pure functions; useCluster feeds it keys and time.
 // Timings and thresholds marked [Placeholder] are invented; the rest follow docs/functional-spec.md.
 import {
-  LIVE_DEFAULT, MODE_DEFAULTS, PARAMS, RIDING_MODES, SHIFT_AT,
+  LIVE_DEFAULT, MODE_DEFAULTS, PARAMS, RIDING_MODES,
   type ClusterState, type DashMessage, type Lamp, type LampId, type Levels, type ParamId, type RidingMode, type Screen,
 } from "./clusterState";
-import { LIMIT_RPM, POWER_SCALE, SHIFT_RPM, START, shiftDown, shiftNeutral, shiftUp, shownKmh, step, torqueAt, type Vehicle } from "./vehicleModel";
+import { POWER_SCALE, limitFor, SHIFT_RPM, START, shiftDown, shiftNeutral, shiftUp, shownKmh, step, torqueAt, type Vehicle } from "./vehicleModel";
 
 export type Held = { throttle: boolean; brake: boolean; clutch: boolean };
 export type Action =
@@ -42,6 +42,8 @@ export type Bike = {
   since: Partial<Record<string, number>>; // when each message became active (for the red 10 s flash)
   note: { text: string; until: number } | null; // short page hint after a refused action
   rode: boolean; // has the bike moved since the page opened (the start steps hide after that)
+  meterRpm: number; // the rev meter reading: engine rpm through a damped needle, so the limiter bounce does not shake it
+  meter: "off" | "shift" | "limiter"; // rev meter colour state, held with hysteresis so it does not flicker at a threshold
 };
 
 const SPLASH_S = 1.5; // Ducati logo before the lamp check [Official order, Placeholder time]
@@ -82,6 +84,8 @@ export const BIKE_START: Bike = {
   since: {},
   note: null,
   rode: false,
+  meterRpm: 0,
+  meter: "off",
 };
 
 const note = (b: Bike, text: string): Bike => ({ ...b, note: { text, until: b.t + 3 } });
@@ -216,12 +220,13 @@ export function tick(b0: Bike, held: Held, dt: number): Bike {
     tripS: b.tripS + (v.running ? dt : 0),
     tripFuelL: b.tripFuelL + fuel,
     fuelL: Math.max(0, b.fuelL - fuel),
-    coolantC: b.coolantC + Math.sign(coolTarget - b.coolantC) * Math.min(Math.abs(coolTarget - b.coolantC), (v.running ? 0.6 : 0.1) * dt),
+    coolantC: b.coolantC + Math.sign(coolTarget - b.coolantC) * Math.min(Math.abs(coolTarget - b.coolantC), (v.running ? 1 : 0.1) * dt),
     turn,
     turnKm: b.turnKm + km,
     since,
     note: b.note && b.note.until > b.t ? b.note : null,
     rode: b.rode || v.speedKmh > 5,
+    ...meterFor({ ...b, v }, dt),
   };
 }
 
@@ -264,7 +269,7 @@ export function toCluster(b: Bike, clock: string, reducedMotion: boolean): Clust
   return {
     ...LIVE_DEFAULT,
     speedKmh: shownKmh(b.v),
-    rpm: b.v.rpm,
+    rpm: b.meterRpm,
     gear: b.v.gear,
     clock,
     ambientTempC: Math.round(b.airC),
@@ -276,8 +281,9 @@ export function toCluster(b: Bike, clock: string, reducedMotion: boolean): Clust
     coolantC: Math.round(b.coolantC),
     lamps,
     turn: { left: turnOn && b.turn !== "right", right: turnOn && b.turn !== "left" },
-    shift: b.v.rpm >= LIMIT_RPM - 100 ? "limiter" : b.v.rpm >= SHIFT_RPM ? "shift" : "off",
-    shiftAt: SHIFT_AT[b.mode],
+    shift: b.meter,
+    shiftFrom: canShiftUp(b) ? SHIFT_RPM : redFrom(b),
+    redFrom: redFrom(b),
     shiftHint: shiftHint(b),
     message: b.phase === "ready" ? currentMessage(b) : null,
     levels: b.levels,
@@ -288,14 +294,28 @@ export function toCluster(b: Bike, clock: string, reducedMotion: boolean): Clust
   };
 }
 
-// Gear-shift suggestion beside the gear [Placeholder rule]: up at the riding mode's shift point, down when the
-// engine labours below 3,000 rpm with the throttle open in 2nd or higher.
-function shiftHint(b: Bike): "up" | "down" | null {
-  const g = b.v.gear;
-  if (!b.v.running || g === "N" || b.v.speedKmh < 3) return null;
-  if (g < 6 && b.v.rpm >= SHIFT_AT[b.mode]) return "up";
-  if (g >= 2 && b.v.rpm < 3000 && b.held.throttle) return "down";
-  return null;
+// Cold engine: the dash warns at a lower "virtual limiter" while the engine warms up: 5,000 rpm below 40 C,
+// 9,000 rpm from 40 to 70 C [Official, Streetfighter V4 S 2024 manual, same engine]. It changes the wake colour
+// and does not cut the engine. Above 70 C the gear's own limiter applies.
+const coldLimit = (b: Bike) => (b.coolantC < 40 ? 5000 : b.coolantC < 70 ? 9000 : Infinity);
+const redFrom = (b: Bike) => Math.min(limitFor(b.v.gear), coldLimit(b));
+const canShiftUp = (b: Bike) => b.v.running && b.v.gear !== "N" && b.v.gear < 6 && coldLimit(b) > SHIFT_RPM;
+
+// Rev meter (Sukhman: the meter flickered). The needle is damped like a real gauge (time constant 0.09 s
+// [Placeholder]), and each colour state switches on at its threshold but only switches off a margin below it.
+// The Ducati wake blinks amber and flashes red; here both colours are held steady instead (Sukhman's change).
+const METER_TAU_S = 0.09;
+function meterFor(b: Bike, dt: number): Pick<Bike, "meterRpm" | "meter"> {
+  const meterRpm = b.meterRpm + (b.v.rpm - b.meterRpm) * (1 - Math.exp(-dt / METER_TAU_S));
+  const red = redFrom(b);
+  const limiter = meterRpm >= red - 100 || (b.meter === "limiter" && meterRpm >= red - 600);
+  const shift = canShiftUp(b) && (meterRpm >= SHIFT_RPM || (b.meter !== "off" && meterRpm >= SHIFT_RPM - 400));
+  return { meterRpm, meter: limiter ? "limiter" : shift ? "shift" : "off" };
+}
+
+// Gear-shift indication: the green shift lamp lights with the amber wake [Official rule]. No shift-down indication.
+function shiftHint(b: Bike): "up" | null {
+  return canShiftUp(b) && b.meter !== "off" ? "up" : null;
 }
 
 // Start steps shown under the cluster until the bike first moves (page chrome, not part of the dash).
@@ -321,5 +341,6 @@ export function hintFor(b: Bike): string {
   if (b.stand) return "Raise the side stand with L, then select 1st with E.";
   if (b.v.gear === "N") return "Press E for 1st gear, then hold W.";
   if (shiftHint(b) === "up") return "Shift up now: press E.";
+  if (coldLimit(b) < Infinity) return `Engine warming up (${Math.round(b.coolantC)} °C): keep it under ${coldLimit(b).toLocaleString("en-GB")} rpm.`;
   return "Hold W to ride. E and Q shift, S brakes.";
 }
