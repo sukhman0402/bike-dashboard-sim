@@ -57,3 +57,8 @@ Checkpoints: after phase 2 and after phase 5 (build passes, scripted key run gre
 - Sukhman flagged that the shift bracket should change per gear like the real V4 S. Research (owner's manuals, same engine) found a per-gear limiter (14,500 / 15,000 in 6th), the amber and red wake rule, and a cold-engine limit. No per-gear shift-up rpm is published. Built, checked by a scripted run (cold, warming, 2nd, 6th), waiting for approval.
 - Sukhman: the RPM meter flickered. Damped needle, hysteresis on the amber and red states, no blink. Measured: 0 colour changes in 3 s at the limiter; needle jitter 0.033 to 0.007 px per frame.
 - Sukhman: the meter held at 7,500 for 1 to 2 s when pulling away. Cause: clutch slip held the engine at 7,500 until the wheel caught up (about 85 km/h). Fixed: slip fades with speed slower than the wheel adds rpm, per power mode. Verified headless: rpm never falls during a launch; Road climbs from about 3,300 at 0.6 s to 5,200 at 2.4 s; model check still passes (RACE A 0-100 3.42 s).
+
+## Execution record
+- Shipped in `bd8d06a` (Stage 2b) and `d8b4de1` (review rounds: per-gear limiter, steady meter, clutch fade, empty meter at idle). All approved by Sukhman.
+- Deviations from the plan: Enter is both start and select; arrows left the throttle; shift indication follows the owner's manuals instead of per-mode points; Ducati's blinking wake held steady at Sukhman's request.
+- Verification: `node scripts/check-model.ts` passes (RACE A 0-100 3.42 s, 0-200 7.02 s, top 298.7 km/h); scripted key runs in the live app passed each round.
